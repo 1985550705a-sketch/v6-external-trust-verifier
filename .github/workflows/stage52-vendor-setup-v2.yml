@@ -1,9 +1,7 @@
 name: Stage52 Vendor Setup V2
 
 on:
-  push:
-    paths:
-      - ".stage52-trigger-v2"
+  workflow_dispatch:
 
 permissions: {}
 

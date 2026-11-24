@@ -1,0 +1,159 @@
+name: V6 N64 replay CAS synthetic one-click trial v1
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: v6-n64-replay-cas-synthetic-trial-v1
+  cancel-in-progress: false
+
+jobs:
+  trial:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: true
+
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532
+        with:
+          cosign-release: v3.1.4
+
+      - name: Exact one-run identity and pinned local assets
+        shell: bash
+        env:
+          V6_REPOSITORY: ${{ github.repository }}
+          V6_REPOSITORY_ID: ${{ github.repository_id }}
+          V6_EVENT: ${{ github.event_name }}
+          V6_REF: ${{ github.ref }}
+          V6_HEAD_SHA: ${{ github.sha }}
+          V6_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          V6_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          test "$V6_REPOSITORY" = "1985550705a-sketch/v6-external-trust-verifier"
+          test "$V6_REPOSITORY_ID" = "1469695205"
+          test "$V6_EVENT" = "workflow_dispatch"
+          test "$V6_REF" = "refs/heads/main"
+          test "$V6_RUN_ATTEMPT" = "1"
+          test "$V6_HEAD_SHA" = "$V6_WORKFLOW_SHA"
+          test "$(git hash-object tools/stage94_cas_trial.py)" = "d7f017e0ecb6085fd3434d77642fac436b38a7ec"
+          test "$(git rev-parse "$V6_HEAD_SHA^{tree}:vendor/drand")" = "db3a1d9428b1f88cf67906e6bfc7b96c9d510084"
+          test "$(cosign version --json | jq -r '.gitVersion')" = "v3.1.4"
+
+      - name: Require untouched synthetic ledger genesis
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin refs/heads/v6-n64-replay-ledger-trial-v1:refs/remotes/origin/v6-n64-replay-ledger-trial-v1
+          parent="$(git rev-parse refs/remotes/origin/v6-n64-replay-ledger-trial-v1)"
+          test "$parent" = "f8508197692722ca974e86efd7a5b88abf04c0c7"
+          test "$(git rev-parse "$parent^{tree}")" = "99bf42076dff94f8e05abcbca33308660d2c83aa"
+          if git ls-tree -r --name-only "$parent" | grep -q '^ledger/'; then
+            echo "TRIAL_LEDGER_NOT_EMPTY" >&2
+            exit 1
+          fi
+          printf '%s' "$parent" > /tmp/v6-parent.txt
+
+      - name: Freeze intent before future drand beacon exists
+        shell: bash
+        env:
+          V6_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          V6_RUN_ID: ${{ github.run_id }}
+          V6_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 10             "https://drand.cloudflare.com/8990e7a9aaed2ffed73dbd7092123d6f289930540d7651336225dc172e51b2ce/public/latest" > /tmp/v6-latest.json
+          observed="$(jq -er '.round|numbers' /tmp/v6-latest.json)"
+          target="$((observed+2))"
+          python3 tools/stage94_cas_trial.py precommit             --observed-round "$observed" --target-round "$target"             --workflow-commit-sha1 "$V6_WORKFLOW_SHA"             --run-id "$V6_RUN_ID" --run-attempt "$V6_RUN_ATTEMPT"             --parent-commit-sha1 "$(cat /tmp/v6-parent.txt)"             --out /tmp/v6-precommit.json
+          printf '%s' "$target" > /tmp/v6-target-round.txt
+
+      - name: Wait for and independently verify the exact future beacon
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(cat /tmp/v6-target-round.txt)"
+          rm -f /tmp/v6-beacon.json
+          for i in $(seq 1 35); do
+            if curl --fail --silent --show-error --max-time 10               "https://drand.cloudflare.com/8990e7a9aaed2ffed73dbd7092123d6f289930540d7651336225dc172e51b2ce/public/${target}"               -o /tmp/v6-beacon.json; then
+              break
+            fi
+            rm -f /tmp/v6-beacon.json
+            sleep 3
+          done
+          test -s /tmp/v6-beacon.json
+          test "$(jq -er '.round|numbers' /tmp/v6-beacon.json)" = "$target"
+          randomness="$(jq -er '.randomness|strings' /tmp/v6-beacon.json)"
+          signature="$(jq -er '.signature|strings' /tmp/v6-beacon.json)"
+          node vendor/drand/verify-beacon.mjs             --round "$target" --randomness "$randomness" --signature "$signature"             --max-age-seconds 60 > /tmp/v6-drand-verify.json
+          python3 tools/stage94_cas_trial.py bind             --precommit /tmp/v6-precommit.json --beacon /tmp/v6-beacon.json             --witness-out /tmp/v6-witness.json --challenge-out /tmp/v6-challenge.txt
+
+      - name: Keyless sign deterministic witness and verify exact trial identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          cosign sign-blob --yes --bundle /tmp/v6-witness.sigstore.json /tmp/v6-witness.json
+          cosign verify-blob /tmp/v6-witness.json             --bundle /tmp/v6-witness.sigstore.json             --certificate-identity "https://github.com/1985550705a-sketch/v6-external-trust-verifier/.github/workflows/v6-n64-replay-cas-trial-v1.yml@refs/heads/main"             --certificate-oidc-issuer "https://token.actions.githubusercontent.com"             --certificate-github-workflow-repository "1985550705a-sketch/v6-external-trust-verifier"             --certificate-github-workflow-ref "refs/heads/main"             --certificate-github-workflow-sha "${{ github.workflow_sha }}"             --certificate-github-workflow-trigger "workflow_dispatch"
+
+      - name: Append one synthetic witness by expected-parent non-force CAS
+        shell: bash
+        run: |
+          set -euo pipefail
+          parent="$(cat /tmp/v6-parent.txt)"
+          witness_sha="$(sha256sum /tmp/v6-witness.json | awk '{print $1}')"
+          git checkout --detach "$parent"
+          test ! -e ledger
+          mkdir ledger
+          cp /tmp/v6-witness.json "ledger/00000000000000000001-${witness_sha}.json"
+          cp /tmp/v6-witness.sigstore.json "ledger/00000000000000000001-${witness_sha}.sigstore.json"
+          git config user.name "v6-replay-cas-trial-bot"
+          git config user.email "v6-replay-cas-trial-bot@users.noreply.github.com"
+          git add ledger
+          git commit -m "V6 synthetic replay CAS trial sequence 1"
+          new_commit="$(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD^)" = "$parent"
+          git push origin "$new_commit:refs/heads/v6-n64-replay-ledger-trial-v1"
+          printf '%s' "$new_commit" > /tmp/v6-new-commit.txt
+          printf '%s' "$witness_sha" > /tmp/v6-witness-sha.txt
+
+      - name: Remote readback exact commit parent and witness bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="$(cat /tmp/v6-new-commit.txt)"
+          witness_sha="$(cat /tmp/v6-witness-sha.txt)"
+          git fetch --no-tags origin refs/heads/v6-n64-replay-ledger-trial-v1:refs/remotes/origin/v6-n64-replay-ledger-trial-v1
+          actual="$(git rev-parse refs/remotes/origin/v6-n64-replay-ledger-trial-v1)"
+          test "$actual" = "$expected"
+          test "$(git rev-parse "$actual^")" = "f8508197692722ca974e86efd7a5b88abf04c0c7"
+          git show "$actual:ledger/00000000000000000001-${witness_sha}.json" > /tmp/v6-readback.json
+          test "$(sha256sum /tmp/v6-readback.json | awk '{print $1}')" = "$witness_sha"
+
+      - name: Prepare bounded evidence artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf cas-out
+          mkdir cas-out
+          cp /tmp/v6-precommit.json cas-out/precommit.json
+          cp /tmp/v6-beacon.json cas-out/beacon.json
+          cp /tmp/v6-drand-verify.json cas-out/drand-verify.json
+          cp /tmp/v6-challenge.txt cas-out/challenge.txt
+          cp /tmp/v6-witness.json cas-out/witness.json
+          cp /tmp/v6-witness.sigstore.json cas-out/witness.sigstore.json
+          cp /tmp/v6-new-commit.txt cas-out/new-commit.txt
+          cp /tmp/v6-witness-sha.txt cas-out/witness-sha.txt
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: v6-n64-replay-cas-trial-${{ github.run_id }}-${{ github.run_attempt }}
+          path: cas-out
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,97 @@
+# NONEXECUTABLE CANDIDATE ONLY — filename deliberately .yml.txt
+# Stage51B. DO NOT rename into .github/workflows until separate setup approval,
+# exact repo IDs, dependency manifests and workflow SHA are frozen.
+name: V6 External Trust V2 Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      raw_evidence_sha256:
+        required: true
+        type: string
+      drand_round:
+        required: true
+        type: string
+      drand_randomness:
+        required: true
+        type: string
+      drand_signature:
+        required: true
+        type: string
+      observer_build_sha256:
+        required: true
+        type: string
+      subject_boot_identity_sha256:
+        required: true
+        type: string
+      subject_process_creation_id:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  attest:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Hard stop while candidate is unbound
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "V6_UNSET_REPOSITORY_ID" != "V6_UNSET_REPOSITORY_ID" || exit 97
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532
+        with:
+          cosign-release: 'v3.1.4'
+
+      - name: Assert cosign version
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cosign version --json | jq -r '.gitVersion')" = "v3.1.4"
+
+      - name: Verify vendored drand verifier manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f ./vendor/drand/V6_VENDOR_MANIFEST.json
+          echo "V6_UNSET_VENDORED_DRAND_MANIFEST_SHA256  ./vendor/drand/V6_VENDOR_MANIFEST.json" | sha256sum -c -
+
+      - name: Verify drand challenge
+        shell: bash
+        env:
+          DRAND_CHAIN: "8990e7a9aaed2ffed73dbd7092123d6f289930540d7651336225dc172e51b2ce"
+          DRAND_ROUND: "${{ inputs.drand_round }}"
+          DRAND_RANDOMNESS: "${{ inputs.drand_randomness }}"
+          DRAND_SIGNATURE: "${{ inputs.drand_signature }}"
+        run: |
+          set -euo pipefail
+          node ./vendor/drand/verify-beacon.mjs --chain "$DRAND_CHAIN" --round "$DRAND_ROUND" --randomness "$DRAND_RANDOMNESS" --signature "$DRAND_SIGNATURE" --max-age-seconds 120
+
+      - name: Build privacy-safe envelope
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 ./tools/build_v6_external_trust_envelope_v2.py > envelope.json
+          test -s envelope.json
+
+      - name: Keyless sign privacy-safe envelope
+        shell: bash
+        run: |
+          set -euo pipefail
+          cosign sign-blob --yes --bundle envelope.sigstore.json envelope.json
+
+      - name: Verify Sigstore bundle before accepting output
+        shell: bash
+        run: |
+          set -euo pipefail
+          cosign verify-blob envelope.json --bundle envelope.sigstore.json --certificate-identity "V6_UNSET_EXACT_CERTIFICATE_IDENTITY" --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+
+      - name: Final hard stop until exact V2 verifier is wired
+        shell: bash
+        run: |
+          set -euo pipefail
+          exit 98

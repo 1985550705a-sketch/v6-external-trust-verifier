@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   external-trust:
-    uses: 1985550705a-sketch/v6-external-trust-verifier/.github/workflows/v6-external-trust-reusable-v3.yml@V6_UNSET_REUSABLE_COMMIT_SHA
+    uses: 1985550705a-sketch/v6-external-trust-verifier/.github/workflows/v6-external-trust-reusable-v3.yml@36d4b9add5df28e8d034211d925dc9f7a289dbe0
     with:
       raw_evidence_sha256: ${{ inputs.raw_evidence_sha256 }}
       drand_round: ${{ inputs.drand_round }}

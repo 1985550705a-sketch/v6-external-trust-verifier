@@ -48,11 +48,11 @@
       "sha256": "736410094041f540a68adef558e7b6fe8d81b2b314eefb8a254c0e5e306e65bb"
     }
   ],
-  "generated_at_utc": "2026-11-24T06:28:15.982561+00:00",
+  "generated_at_utc": "2026-11-24T06:33:24.921845+00:00",
   "github_repository_id": "1469695205",
   "github_repository_owner_id": "360536248",
   "run_attempt": "1",
-  "run_id": "45340659047",
+  "run_id": "45341282295",
   "schema": "V6_STAGE52_DRAND_VENDOR_MANIFEST_V1",
   "status": "BUILT_ON_GITHUB_HOSTED_RUNNER",
   "upstream_commit": "ef8c9260294f8699b5e8c27a6b764f8f0d768bea",

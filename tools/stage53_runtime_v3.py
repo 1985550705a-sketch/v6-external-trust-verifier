@@ -22,6 +22,7 @@ FORMAL_GATES=(
 )
 
 def die(x): raise SystemExit(x)
+def sha256_bytes(b:bytes)->str: return hashlib.sha256(b).hexdigest()
 def sha256_file(p:pathlib.Path)->str:
     h=hashlib.sha256()
     with p.open("rb") as f:

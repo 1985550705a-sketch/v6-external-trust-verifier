@@ -58,32 +58,32 @@ jobs:
           V6_RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           set -euo pipefail
-          python3 tools/stage53_runtime_v3.py preflight \\
-            --raw-evidence-sha256 "${{ inputs.raw_evidence_sha256 }}" \\
-            --drand-round "${{ inputs.drand_round }}" \\
-            --drand-randomness "${{ inputs.drand_randomness }}" \\
-            --observer-build-sha256 "${{ inputs.observer_build_sha256 }}" \\
-            --subject-boot-identity-sha256 "${{ inputs.subject_boot_identity_sha256 }}" \\
-            --subject-process-creation-id "${{ inputs.subject_process_creation_id }}" \\
-            --prior-accepted-drand-round "${{ inputs.prior_accepted_drand_round }}" \\
+          python3 tools/stage53_runtime_v3.py preflight \
+            --raw-evidence-sha256 "${{ inputs.raw_evidence_sha256 }}" \
+            --drand-round "${{ inputs.drand_round }}" \
+            --drand-randomness "${{ inputs.drand_randomness }}" \
+            --observer-build-sha256 "${{ inputs.observer_build_sha256 }}" \
+            --subject-boot-identity-sha256 "${{ inputs.subject_boot_identity_sha256 }}" \
+            --subject-process-creation-id "${{ inputs.subject_process_creation_id }}" \
+            --prior-accepted-drand-round "${{ inputs.prior_accepted_drand_round }}" \
             --out-dir stage53-out
 
       - name: Verify fresh drand challenge
         shell: bash
         run: |
           set -euo pipefail
-          node vendor/drand/verify-beacon.mjs \\
-            --round "${{ inputs.drand_round }}" \\
-            --randomness "${{ inputs.drand_randomness }}" \\
-            --signature "${{ inputs.drand_signature }}" \\
+          node vendor/drand/verify-beacon.mjs \
+            --round "${{ inputs.drand_round }}" \
+            --randomness "${{ inputs.drand_randomness }}" \
+            --signature "${{ inputs.drand_signature }}" \
             --max-age-seconds 120 > stage53-out/drand-verify.json
 
       - name: Keyless sign privacy-safe envelope
         shell: bash
         run: |
           set -euo pipefail
-          cosign sign-blob --yes \\
-            --bundle stage53-out/envelope.sigstore.json \\
+          cosign sign-blob --yes \
+            --bundle stage53-out/envelope.sigstore.json \
             stage53-out/envelope.json
 
       - name: Verify bundle, exact reusable identity, caller repo/ref/SHA/trigger
@@ -92,25 +92,25 @@ jobs:
           V6_CERT_IDENTITY: https://github.com/${{ job.workflow_ref }}
         run: |
           set -euo pipefail
-          cosign verify-blob stage53-out/envelope.json \\
-            --bundle stage53-out/envelope.sigstore.json \\
-            --certificate-identity "$V6_CERT_IDENTITY" \\
-            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\
-            --certificate-github-workflow-repository "${{ github.repository }}" \\
-            --certificate-github-workflow-ref "${{ github.ref }}" \\
-            --certificate-github-workflow-sha "${{ github.sha }}" \\
-            --certificate-github-workflow-trigger "${{ github.event_name }}" \\
+          cosign verify-blob stage53-out/envelope.json \
+            --bundle stage53-out/envelope.sigstore.json \
+            --certificate-identity "$V6_CERT_IDENTITY" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --certificate-github-workflow-repository "${{ github.repository }}" \
+            --certificate-github-workflow-ref "${{ github.ref }}" \
+            --certificate-github-workflow-sha "${{ github.sha }}" \
+            --certificate-github-workflow-trigger "${{ github.event_name }}" \
             > stage53-out/cosign-verify.txt 2>&1
 
       - name: Finalize policy result
         shell: bash
         run: |
           set -euo pipefail
-          python3 tools/stage53_runtime_v3.py finalize \\
-            --out-dir stage53-out \\
-            --drand-result stage53-out/drand-verify.json \\
-            --cosign-verify-output stage53-out/cosign-verify.txt \\
-            --bundle stage53-out/envelope.sigstore.json \\
+          python3 tools/stage53_runtime_v3.py finalize \
+            --out-dir stage53-out \
+            --drand-result stage53-out/drand-verify.json \
+            --cosign-verify-output stage53-out/cosign-verify.txt \
+            --bundle stage53-out/envelope.sigstore.json \
             --prior-accepted-drand-round "${{ inputs.prior_accepted_drand_round }}"
 
       - name: Re-run adversarial policy unit tests

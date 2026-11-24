@@ -135,6 +135,7 @@ def verify_policy_precheck(*, envelope_raw: bytes, trust_raw: bytes,
     claims = e["formal_gate_claims"]
     if type(claims) is not dict or set(claims) != set(FORMAL_GATES):
         _deny("FORMAL_GATE_SET_MISMATCH")
+    # Trust-domain proof cannot self-promote Native.
     if any(v not in ("UNPROVEN", "EVIDENCE_PRESENT_REVIEW_REQUIRED") for v in claims.values()):
         _deny("NATIVE_GATE_SELF_PROMOTION_FORBIDDEN")
 

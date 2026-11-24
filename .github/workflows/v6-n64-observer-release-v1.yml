@@ -1,0 +1,61 @@
+name: V6 N64 observer release provenance v1
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  attest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532
+        with:
+          cosign-release: v3.1.4
+      - name: Create exact observer release statement
+        shell: bash
+        env:
+          V6_REPOSITORY: ${{ github.repository }}
+          V6_RUN_ID: ${{ github.run_id }}
+          V6_RUN_ATTEMPT: ${{ github.run_attempt }}
+          V6_HEAD_SHA: ${{ github.sha }}
+          V6_WORKFLOW_REF: ${{ github.workflow_ref }}
+          V6_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          test "$V6_REPOSITORY" = "1985550705a-sketch/v6-external-trust-verifier"
+          test "$V6_RUN_ATTEMPT" = "1"
+          python3 - <<'PY'
+          import base64,hashlib,json,os
+          raw=base64.b64decode("eyJjYW5vbmljYWxfcHJvbW90aW9uX2FsbG93ZWQiOmZhbHNlLCJjbGFzc2lmaWNhdGlvbiI6Ik9CU0VSVkVSX1JFTEVBU0VfUFJPVkVOQU5DRV9PTkxZX05PVF9XSU5ET1dTX1JVTlRJTUVfTk9UX0VOUk9MTE1FTlQiLCJndWFyZF9yZWxlYXNlX2FsbG93ZWQiOmZhbHNlLCJpbnRlbmRlZF93aXRuZXNzX3Njb3BlIjoiSVNPTEFURURfV0lORE9XU19TQU5EQk9YIiwibmF0aXZlX2FjY2VwdG9yX3NvdXJjZV9zaGEyNTYiOiIwMDI1ZTM3NjAzYmE3OTgxNDVlODZlZWMzNjM5NTJjNzc0NzM5ZTczNThiNDZhYjdiNWFkZTZhOWVkNzA0YjE2IiwibmF0aXZlX3Byb2R1Y3Rpb25fZ2F0ZXNfcHJvdmVuIjowLCJvYnNlcnZlcl9mYW1pbHkiOiJTMzZfSVNPTEFURURfV0lOMzJfT0JTRVJWRVIiLCJvYnNlcnZlcl9zb3VyY2Vfc2hhMjU2IjoiOTdiOTNhMGYyYjMxOWExZjBhNTdiM2YxNDZhY2VlYTZkMDczMTcwMGIyZmZmZGEzZGM2YmRmNzljNWMzZWM1ZiIsInByb2R1Y3Rpb25fZW5yb2xsbWVudF9zaGEiOiJOT05FIiwiczM3X2FkbWlzc2lvbl9zb3VyY2Vfc2hhMjU2IjoiMjQxZTI1MmYxNmYwM2E1YWUwZmI4MzE4MDkzMzIwNWNlYmRjNjcyNzI0MjFkYTFlOTI4MDlmNDZjNzIxMGQzYiIsInMzN193aW5kb3dzX3Jlc3VsdF9hZG1pc3Npb25fc2hhMjU2IjoiMjg2YzE3NzZiZmI0OWFkNzM4OTZmOTUxZjZlMTljMGViMTJlMzBlZDdiYzljYzRmYWM5YjM2ODZiNDA4ODY1NyIsInNhZmVfam9iX2FsbG93ZWQiOmZhbHNlLCJzY2hlbWEiOiJWNl9ONjRfT0JTRVJWRVJfUkVMRUFTRV9TVEFURU1FTlRfVjEiLCJzdGFnZTQzZF9wY19yZWNlaXB0X3NoYTI1NiI6ImU0ZjI5M2VlYTI2NjBmNmEwMjk3ZTQwYThlNWRmMTY0OTJiZTA3YzU2NWM5MjI0ZjA0MmRiMWMwYmNjODhjNzIiLCJzdGFnZTcxX2V4dGVybmFsX3NpZ25lcl9wcm9maWxlX3NoYTI1NiI6ImIwZWM4ZDM2NzYxYjgyYmY0ZWVmZGQ2ZGE4NGE3MWJhZDcyZjYwODgzMmQxMzc5MjFkNTNhNWI3ZTg2MWIwNTYifQ==",validate=True)
+          if hashlib.sha256(raw).hexdigest()!="09c5a1942ac8febe593f06f735570e1590b1042b976ed96c855a0faa98a6c55d":
+              raise SystemExit("RELEASE_SHA_MISMATCH")
+          x=json.loads(raw.decode("utf-8"))
+          canon=json.dumps(x,sort_keys=True,separators=(",",":"),ensure_ascii=True,allow_nan=False).encode()
+          if canon!=raw:
+              raise SystemExit("RELEASE_NOT_CANONICAL")
+          open("observer-release.json","wb").write(raw)
+          meta={
+            "schema":"V6_N64_OBSERVER_RELEASE_RUN_IDENTITY_V1",
+            "repository":os.environ["V6_REPOSITORY"],
+            "run_id":os.environ["V6_RUN_ID"],
+            "run_attempt":os.environ["V6_RUN_ATTEMPT"],
+            "head_sha":os.environ["V6_HEAD_SHA"],
+            "workflow_ref":os.environ["V6_WORKFLOW_REF"],
+            "workflow_sha":os.environ["V6_WORKFLOW_SHA"],
+            "release_sha256":"09c5a1942ac8febe593f06f735570e1590b1042b976ed96c855a0faa98a6c55d"
+          }
+          open("run-identity.json","wb").write(json.dumps(meta,sort_keys=True,separators=(",",":"),ensure_ascii=True,allow_nan=False).encode())
+          PY
+          test "$(sha256sum observer-release.json | awk '{print $1}')" = "09c5a1942ac8febe593f06f735570e1590b1042b976ed96c855a0faa98a6c55d"
+          cosign sign-blob --yes --bundle observer-release.sigstore.json observer-release.json
+          cosign verify-blob observer-release.json             --bundle observer-release.sigstore.json             --certificate-identity "https://github.com/1985550705a-sketch/v6-external-trust-verifier/.github/workflows/v6-n64-observer-release-v1.yml@refs/heads/main"             --certificate-oidc-issuer "https://token.actions.githubusercontent.com"             --certificate-github-workflow-repository "1985550705a-sketch/v6-external-trust-verifier"             --certificate-github-workflow-ref "refs/heads/main"             --certificate-github-workflow-sha "$V6_HEAD_SHA"             --certificate-github-workflow-trigger "workflow_dispatch"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: v6-n64-observer-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            observer-release.json
+            observer-release.sigstore.json
+            run-identity.json
+          if-no-files-found: error
+          retention-days: 7

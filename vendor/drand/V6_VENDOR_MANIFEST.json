@@ -1,0 +1,62 @@
+{
+  "drand_chain_hash": "8990e7a9aaed2ffed73dbd7092123d6f289930540d7651336225dc172e51b2ce",
+  "drand_public_key": "868f005eb8e6e4ca0a47c8a77ceaa5309a47978a7c71bc5cce96366b5d7a569937c529eeda66c7293784a9402801af31",
+  "files": [
+    {
+      "bytes": 520,
+      "name": "LICENSE-APACHE",
+      "sha256": "30fdfde4dbde73c66123aba24487366771ffc54bba09566b313338199c3eb7dc"
+    },
+    {
+      "bytes": 1036,
+      "name": "LICENSE-MIT",
+      "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+    },
+    {
+      "bytes": 339712,
+      "name": "index.mjs",
+      "sha256": "c5f6eff0d5692efd8f2e19953a49713d17554739016f9d0f3235380aab9ea904"
+    },
+    {
+      "bytes": 797322,
+      "name": "index.mjs.map",
+      "sha256": "6c1088a3e42453c8a8e862b7ae394c515e8d50c5dec2e93a346e1a6d3fff42c0"
+    },
+    {
+      "bytes": 9,
+      "name": "node-version.txt",
+      "sha256": "17e666b140e321b57eec7d7066da9f774ad2457620dc275d6386b5224ab416ac"
+    },
+    {
+      "bytes": 7,
+      "name": "npm-version.txt",
+      "sha256": "d49bd31f65cb736f4045946e1c8365657cfed300dc0e4f173af5e93ab4500e1a"
+    },
+    {
+      "bytes": 204165,
+      "name": "package-lock.json",
+      "sha256": "8c9a03a902129484f806faf8bdac9a9b30d42c171af24de1ddf2f93b0dc0f32e"
+    },
+    {
+      "bytes": 2587,
+      "name": "package.json",
+      "sha256": "71271cae1994991202a8e717923560d62db0c615e19e31e9a60f40b92d8ee9f7"
+    },
+    {
+      "bytes": 1832,
+      "name": "verify-beacon.mjs",
+      "sha256": "736410094041f540a68adef558e7b6fe8d81b2b314eefb8a254c0e5e306e65bb"
+    }
+  ],
+  "generated_at_utc": "2026-11-24T06:28:15.982561+00:00",
+  "github_repository_id": "1469695205",
+  "github_repository_owner_id": "360536248",
+  "run_attempt": "1",
+  "run_id": "45340659047",
+  "schema": "V6_STAGE52_DRAND_VENDOR_MANIFEST_V1",
+  "status": "BUILT_ON_GITHUB_HOSTED_RUNNER",
+  "upstream_commit": "ef8c9260294f8699b5e8c27a6b764f8f0d768bea",
+  "upstream_package_lock_git_blob_sha1": "f5a4f7ccbcd51d35e23fef45f8323769c4312d71",
+  "upstream_repository": "drand/drand-client",
+  "upstream_tag": "v1.4.2"
+}

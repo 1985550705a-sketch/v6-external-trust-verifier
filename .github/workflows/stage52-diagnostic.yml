@@ -1,0 +1,13 @@
+name: Stage52 Actions Diagnostic
+on:
+  push:
+    paths:
+      - ".stage52-diagnostic"
+permissions:
+  contents: read
+jobs:
+  diagnostic:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Diagnostic
+        run: echo "STAGE52_ACTIONS_DIAGNOSTIC_PASS"

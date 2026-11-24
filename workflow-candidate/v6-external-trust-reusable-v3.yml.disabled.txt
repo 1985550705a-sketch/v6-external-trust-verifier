@@ -1,0 +1,99 @@
+name: V6 External Trust Reusable V3
+
+on:
+  workflow_call:
+    inputs:
+      raw_evidence_sha256: {required: true, type: string}
+      drand_round: {required: true, type: number}
+      drand_randomness: {required: true, type: string}
+      drand_signature: {required: true, type: string}
+      observer_build_sha256: {required: true, type: string}
+      subject_boot_identity_sha256: {required: true, type: string}
+      subject_process_creation_id: {required: true, type: string}
+      prior_accepted_drand_round: {required: true, type: number}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  attest:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout reusable workflow source at exact job SHA
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          persist-credentials: false
+
+      - name: Install pinned cosign
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532
+        with:
+          cosign-release: v3.1.4
+
+      - name: Assert cosign version
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cosign version --json | jq -r '.gitVersion')" = "v3.1.4"
+
+      - name: Preflight exact identity and privacy-safe inputs
+        shell: bash
+        env:
+          V6_REPOSITORY: ${{ github.repository }}
+          V6_REPOSITORY_ID: ${{ github.repository_id }}
+          V6_REPOSITORY_OWNER_ID: ${{ github.repository_owner_id }}
+          V6_REPOSITORY_VISIBILITY: ${{ github.repository_visibility }}
+          V6_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          V6_EVENT_NAME: ${{ github.event_name }}
+          V6_REF: ${{ github.ref }}
+          V6_SHA: ${{ github.sha }}
+          V6_WORKFLOW_REF: ${{ github.workflow_ref }}
+          V6_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          V6_JOB_WORKFLOW_REF: ${{ job.workflow_ref }}
+          V6_JOB_WORKFLOW_SHA: ${{ job.workflow_sha }}
+          V6_RUN_ID: ${{ github.run_id }}
+          V6_RUN_NUMBER: ${{ github.run_number }}
+          V6_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          python3 tools/stage53_runtime_v3.py preflight             --raw-evidence-sha256 "${{ inputs.raw_evidence_sha256 }}"             --drand-round "${{ inputs.drand_round }}"             --drand-randomness "${{ inputs.drand_randomness }}"             --observer-build-sha256 "${{ inputs.observer_build_sha256 }}"             --subject-boot-identity-sha256 "${{ inputs.subject_boot_identity_sha256 }}"             --subject-process-creation-id "${{ inputs.subject_process_creation_id }}"             --prior-accepted-drand-round "${{ inputs.prior_accepted_drand_round }}"             --out-dir stage53-out
+
+      - name: Verify fresh drand challenge
+        shell: bash
+        run: |
+          set -euo pipefail
+          node vendor/drand/verify-beacon.mjs             --round "${{ inputs.drand_round }}"             --randomness "${{ inputs.drand_randomness }}"             --signature "${{ inputs.drand_signature }}"             --max-age-seconds 120 > stage53-out/drand-verify.json
+
+      - name: Keyless sign privacy-safe envelope
+        shell: bash
+        run: |
+          set -euo pipefail
+          cosign sign-blob --yes             --bundle stage53-out/envelope.sigstore.json             stage53-out/envelope.json
+
+      - name: Verify bundle, exact reusable identity, caller repo/ref/SHA/trigger
+        shell: bash
+        env:
+          V6_CERT_IDENTITY: https://github.com/${{ job.workflow_ref }}
+        run: |
+          set -euo pipefail
+          cosign verify-blob stage53-out/envelope.json             --bundle stage53-out/envelope.sigstore.json             --certificate-identity "$V6_CERT_IDENTITY"             --certificate-oidc-issuer "https://token.actions.githubusercontent.com"             --certificate-github-workflow-repository "${{ github.repository }}"             --certificate-github-workflow-ref "${{ github.ref }}"             --certificate-github-workflow-sha "${{ github.sha }}"             --certificate-github-workflow-trigger "${{ github.event_name }}"             > stage53-out/cosign-verify.txt 2>&1
+
+      - name: Finalize policy result
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/stage53_runtime_v3.py finalize             --out-dir stage53-out             --drand-result stage53-out/drand-verify.json             --cosign-verify-output stage53-out/cosign-verify.txt             --bundle stage53-out/envelope.sigstore.json             --prior-accepted-drand-round "${{ inputs.prior_accepted_drand_round }}"
+
+      - name: Re-run adversarial policy unit tests
+        shell: bash
+        run: python3 -m unittest tests/test_v6_external_trust_policy_v3_OFFHOST_ONLY.py
+
+      - name: Upload privacy-safe trust evidence only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: v6-stage53-external-trust-v3-${{ github.run_id }}-${{ github.run_attempt }}
+          path: stage53-out
+          if-no-files-found: error
+          retention-days: 7

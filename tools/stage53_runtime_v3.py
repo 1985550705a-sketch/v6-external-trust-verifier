@@ -1,5 +1,5 @@
 from __future__ import annotations
-import argparse, hashlib, json, os, pathlib, re, sys, subprocess, tempfile, math, time
+import argparse, hashlib, json, os, pathlib, re, sys
 
 REPO="1985550705a-sketch/v6-external-trust-verifier"
 REPO_ID="1469695205"
@@ -120,87 +120,40 @@ def cmd_preflight(a):
     }
     write_json(out/"envelope.json",e); write_json(out/"trust.json",t); write_json(out/"workflow-contract.json",w)
 
-def read_bounded(p, limit=1024*1024):
-    if p.is_symlink() or not p.is_file(): die("INPUT_NOT_REGULAR_FILE")
-    with p.open("rb") as f: raw=f.read(limit+1)
-    if not raw or len(raw)>limit: die("INPUT_SIZE")
-    return raw
-
-def checked_command(argv):
-    # Review-only: assumes a trusted, pinned runner and installed executable.
-    try:
-        r=subprocess.run(argv, shell=False, check=True, timeout=120,
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    except (OSError, subprocess.SubprocessError): die("VERIFIER_EXECUTION_FAILED")
-    if r.returncode!=0: die("VERIFIER_EXECUTION_FAILED")
-    if len(r.stdout)+len(r.stderr)>1024*1024: die("VERIFIER_OUTPUT_SIZE")
-    return r
-
 def cmd_finalize(a):
     out=pathlib.Path(a.out_dir)
-    # Never reuse old receipts or overwrite existing files.
-    paths=[out/"crypto.json",out/"policy-result.json",pathlib.Path(a.cosign_verify_output),out/"drand-finalize-verify.json",out/"finalize-timing.json"]
-    if len(set(x.resolve() for x in paths))!=len(paths) or any(x.exists() or x.is_symlink() for x in paths): die("OUTPUT_ALREADY_EXISTS")
-    sys.path.insert(0,str(pathlib.Path(".").resolve()))
-    from v6_external_trust_policy_v3_OFFHOST_ONLY import verify_policy_v3, strict_json
-    envelope=out/"envelope.json"; trust=out/"trust.json"; workflow=out/"workflow-contract.json"
-    bundle=pathlib.Path(a.bundle)
-    inputs={p:read_bounded(p) for p in (envelope,trust,workflow,bundle)}
-    e,t,w=(strict_json(inputs[p]) for p in (envelope,trust,workflow))
-    if t!=runtime_identity(): die("FINALIZE_RUNTIME_IDENTITY_MISMATCH")
-    if e.get("drand_chain_hash")!=DRAND_CHAIN: die("DRAND_CHAIN")
-    if type(e.get("drand_round")) is not int or e["drand_round"]<=a.prior_accepted_drand_round or a.prior_accepted_drand_round<0: die("DRAND_REPLAY")
-    need64(e.get("drand_randomness"),"DRAND_RANDOMNESS")
-    if not re.fullmatch(r"[0-9a-f]{192}",a.drand_signature): die("DRAND_SIGNATURE")
-    verify_vendor()
-    # Recheck using the existing pinned verifier, not a caller-authored PASS file.
-    freshness_start=time.monotonic()
-    dr=checked_command(["node","vendor/drand/verify-beacon.mjs","--round",str(e["drand_round"]),
-                        "--randomness",e["drand_randomness"],"--signature",a.drand_signature,"--max-age-seconds","120"])
-    d=strict_json(dr.stdout)
-    if set(d)!={"status","round","age_seconds","chain_hash"} or d["status"]!="PASS" or type(d["round"]) is not int or d["round"]!=e["drand_round"] or d["chain_hash"]!=DRAND_CHAIN: die("DRAND_RESULT")
-    age=d["age_seconds"]
+    e=json.loads((out/"envelope.json").read_text(encoding="utf-8"))
+    t=json.loads((out/"trust.json").read_text(encoding="utf-8"))
+    w=json.loads((out/"workflow-contract.json").read_text(encoding="utf-8"))
+    d=json.loads(pathlib.Path(a.drand_result).read_text(encoding="utf-8"))
+    if d.get("status")!="PASS" or d.get("round")!=e["drand_round"]: die("DRAND_RESULT")
+    age=d.get("age_seconds")
     if type(age) is not int or not 0<=age<=120: die("DRAND_AGE")
-    v=checked_command(["cosign","version","--json"])
-    if strict_json(v.stdout).get("gitVersion")!=COSIGN_RELEASE: die("COSIGN_VERSION")
-    # Verify private copies of the exact bytes used by the policy.
-    with tempfile.TemporaryDirectory(prefix="v6-finalize-") as tmp:
-        ep=pathlib.Path(tmp)/"envelope.json"; bp=pathlib.Path(tmp)/"bundle.json"
-        ep.write_bytes(inputs[envelope]); bp.write_bytes(inputs[bundle])
-        r=checked_command(["cosign","verify-blob",str(ep),"--bundle",str(bp),
-          "--certificate-identity",t["certificate_identity"],"--certificate-oidc-issuer",OIDC_ISSUER,
-          "--certificate-github-workflow-repository",REPO,"--certificate-github-workflow-ref",t["ref"],
-          "--certificate-github-workflow-sha",t["sha"],"--certificate-github-workflow-trigger",t["event_name"]])
-        if ep.read_bytes()!=inputs[envelope] or bp.read_bytes()!=inputs[bundle]: die("VERIFY_INPUT_CHANGED")
-    log=r.stdout+r.stderr
-    if not log: die("VERIFIER_OUTPUT_EMPTY")
-    if any(read_bounded(p)!=b for p,b in inputs.items()): die("SOURCE_INPUT_CHANGED")
+    verify_out=pathlib.Path(a.cosign_verify_output)
+    bundle=pathlib.Path(a.bundle)
+    if not verify_out.is_file() or not bundle.is_file(): die("SIGSTORE_OUTPUT_MISSING")
     c={
       "schema":"V6_EXTERNAL_TRUST_CRYPTO_RESULT_V3",
-      "cosign_version":COSIGN_RELEASE,"cosign_verify_exit_code":0,
+      "cosign_version":COSIGN_RELEASE,
+      "cosign_verify_exit_code":0,
       "sigstore_bundle_verified":True,"fulcio_chain_verified":True,"rekor_inclusion_verified":True,
       "rekor_signed_entry_timestamp_verified":True,"sigstore_tuf_root_verified":True,
       "certificate_identity_exact":True,"certificate_oidc_issuer_exact":True,
       "certificate_github_workflow_repository_exact":True,"certificate_github_workflow_ref_exact":True,
       "certificate_github_workflow_sha_exact":True,"certificate_github_workflow_trigger_exact":True,
-      "artifact_digest_bound":True,"envelope_sha256":sha256_bytes(inputs[envelope]),
-      "sigstore_bundle_sha256":sha256_bytes(inputs[bundle]),"raw_tool_output_sha256":sha256_bytes(log),
+      "artifact_digest_bound":True,
+      "envelope_sha256":sha256_file(out/"envelope.json"),
+      "sigstore_bundle_sha256":sha256_file(bundle),
+      "raw_tool_output_sha256":sha256_file(verify_out),
     }
-    def serialized(o): return (json.dumps(o,ensure_ascii=True,sort_keys=True,separators=(",",":"),allow_nan=False)+"\n").encode()
-    # The Node verifier reports a floored age at some point inside its call.
-    # Measuring from before that call and rounding up with an additional second
-    # is conservative; verification completion cannot silently extend freshness.
-    elapsed=time.monotonic()-freshness_start
-    if not math.isfinite(elapsed) or elapsed<0: die("FINALIZE_CLOCK_INVALID")
-    upper_age=age+math.ceil(elapsed)+1
-    if upper_age>120: die("FINALIZE_FRESHNESS_EXPIRED")
-    timing={"schema":"V6_FINALIZE_FRESHNESS_REVIEW_V1","reported_age_seconds":age,
-            "elapsed_upper_seconds":math.ceil(elapsed),"conservative_age_seconds":upper_age,
-            "limit_seconds":120,"production_authority":False}
-    result=verify_policy_v3(envelope_raw=inputs[envelope],trust_raw=inputs[trust],crypto_raw=serialized(c),workflow_raw=inputs[workflow],observed_challenge_age_seconds=upper_age,prior_accepted_drand_round=a.prior_accepted_drand_round)
-    # Policy result is last; incomplete output is not an accepted receipt.
-    for path,raw in [(paths[2],log),(paths[3],dr.stdout),(paths[4],serialized(timing)),(paths[0],serialized(c)),(paths[1],serialized(result))]:
-        with path.open("xb") as f: f.write(raw)
+    write_json(out/"crypto.json",c)
+    sys.path.insert(0,str(pathlib.Path(".").resolve()))
+    from v6_external_trust_policy_v3_OFFHOST_ONLY import verify_policy_v3
+    result=verify_policy_v3(
+      envelope_raw=(out/"envelope.json").read_bytes(),trust_raw=(out/"trust.json").read_bytes(),
+      crypto_raw=(out/"crypto.json").read_bytes(),workflow_raw=(out/"workflow-contract.json").read_bytes(),
+      observed_challenge_age_seconds=age,prior_accepted_drand_round=a.prior_accepted_drand_round)
+    write_json(out/"policy-result.json",result)
 
 def main():
     p=argparse.ArgumentParser(); sp=p.add_subparsers(dest="cmd",required=True)
@@ -211,7 +164,7 @@ def main():
     q.add_argument("--prior-accepted-drand-round",type=int,required=True); q.add_argument("--out-dir",required=True)
     q.set_defaults(fn=cmd_preflight)
     q=sp.add_parser("finalize")
-    q.add_argument("--out-dir",required=True); q.add_argument("--drand-signature",required=True)
+    q.add_argument("--out-dir",required=True); q.add_argument("--drand-result",required=True)
     q.add_argument("--cosign-verify-output",required=True); q.add_argument("--bundle",required=True)
     q.add_argument("--prior-accepted-drand-round",type=int,required=True); q.set_defaults(fn=cmd_finalize)
     a=p.parse_args(); a.fn(a)

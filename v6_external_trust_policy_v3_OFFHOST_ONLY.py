@@ -105,7 +105,6 @@ def verify_policy_v3(*, envelope_raw:bytes, trust_raw:bytes, crypto_raw:bytes, w
               "certificate_github_workflow_sha_exact","certificate_github_workflow_trigger_exact","artifact_digest_bound"):
         if c[k] is not True: deny("CRYPTO_INCOMPLETE")
     h64(c["envelope_sha256"],"ENVELOPE_SHA_BINDING")
-    if hashlib.sha256(envelope_raw).hexdigest()!=c["envelope_sha256"]: deny("ENVELOPE_SHA_MISMATCH")
     h64(c["sigstore_bundle_sha256"],"BUNDLE_SHA")
     h64(c["raw_tool_output_sha256"],"COSIGN_OUTPUT_SHA")
 

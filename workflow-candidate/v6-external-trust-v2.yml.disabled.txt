@@ -36,12 +36,14 @@ jobs:
   attest:
     runs-on: ubuntu-24.04
     steps:
+      # First external setup must replace every V6_UNSET_* and then freeze exact SHA.
       - name: Hard stop while candidate is unbound
         shell: bash
         run: |
           set -euo pipefail
           test "V6_UNSET_REPOSITORY_ID" != "V6_UNSET_REPOSITORY_ID" || exit 97
 
+      # Exact action pin candidate. First setup must independently read back this commit.
       - name: Install cosign
         uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532
         with:
@@ -53,6 +55,8 @@ jobs:
           set -euo pipefail
           test "$(cosign version --json | jq -r '.gitVersion')" = "v3.1.4"
 
+      # No dynamic package acquisition is permitted during a trust run.
+      # ./vendor/drand must exist and match a frozen manifest created during setup.
       - name: Verify vendored drand verifier manifest
         shell: bash
         run: |
@@ -69,8 +73,9 @@ jobs:
           DRAND_SIGNATURE: "${{ inputs.drand_signature }}"
         run: |
           set -euo pipefail
-          node ./vendor/drand/verify-beacon.mjs --chain "$DRAND_CHAIN" --round "$DRAND_ROUND" --randomness "$DRAND_RANDOMNESS" --signature "$DRAND_SIGNATURE" --max-age-seconds 120
+          node ./vendor/drand/verify-beacon.mjs             --chain "$DRAND_CHAIN"             --round "$DRAND_ROUND"             --randomness "$DRAND_RANDOMNESS"             --signature "$DRAND_SIGNATURE"             --max-age-seconds 120
 
+      # The future script must construct a canonical privacy-safe envelope only.
       - name: Build privacy-safe envelope
         shell: bash
         run: |
@@ -88,7 +93,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cosign verify-blob envelope.json --bundle envelope.sigstore.json --certificate-identity "V6_UNSET_EXACT_CERTIFICATE_IDENTITY" --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+          cosign verify-blob envelope.json             --bundle envelope.sigstore.json             --certificate-identity "V6_UNSET_EXACT_CERTIFICATE_IDENTITY"             --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 
       - name: Final hard stop until exact V2 verifier is wired
         shell: bash

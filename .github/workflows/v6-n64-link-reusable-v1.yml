@@ -1,0 +1,74 @@
+name: V6 N64 synthetic digest link candidate
+on:
+  workflow_call:
+    inputs:
+      challenge_sha256: {required: true, type: string}
+      drand_randomness: {required: true, type: string}
+      drand_round: {required: true, type: string}
+      drand_signature: {required: true, type: string}
+      generation_sha256: {required: true, type: string}
+      observation_commitment_sha256: {required: true, type: string}
+      observer_build_sha256: {required: true, type: string}
+      observer_signature_sha256: {required: true, type: string}
+      prior_accepted_drand_round: {required: true, type: string}
+      raw_evidence_sha256: {required: true, type: string}
+      subject_boot_identity_sha256: {required: true, type: string}
+      subject_process_creation_id: {required: true, type: string}
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  attest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          persist-credentials: false
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532
+        with:
+          cosign-release: v3.1.4
+      - name: Validate and sign synthetic digest link
+        shell: bash
+        env:
+          V6_REPOSITORY: ${{ github.repository }}
+          V6_REPOSITORY_ID: ${{ github.repository_id }}
+          V6_OWNER_ID: ${{ github.repository_owner_id }}
+          V6_VISIBILITY: ${{ github.repository_visibility }}
+          V6_RUNNER: ${{ runner.environment }}
+          V6_EVENT: ${{ github.event_name }}
+          V6_REF: ${{ github.ref }}
+          V6_CALLER_REF: ${{ github.workflow_ref }}
+          V6_CALLER_SHA: ${{ github.workflow_sha }}
+          V6_HEAD_SHA: ${{ github.sha }}
+          V6_WORKFLOW_REF: ${{ job.workflow_ref }}
+          V6_WORKFLOW_SHA: ${{ job.workflow_sha }}
+          V6_RUN_ID: ${{ github.run_id }}
+          V6_RUN_ATTEMPT: ${{ github.run_attempt }}
+          V6_LINK_CHALLENGE_SHA256: ${{ inputs.challenge_sha256 }}
+          V6_LINK_DRAND_RANDOMNESS: ${{ inputs.drand_randomness }}
+          V6_LINK_DRAND_ROUND: ${{ inputs.drand_round }}
+          V6_LINK_DRAND_SIGNATURE: ${{ inputs.drand_signature }}
+          V6_LINK_GENERATION_SHA256: ${{ inputs.generation_sha256 }}
+          V6_LINK_OBSERVATION_COMMITMENT_SHA256: ${{ inputs.observation_commitment_sha256 }}
+          V6_LINK_OBSERVER_BUILD_SHA256: ${{ inputs.observer_build_sha256 }}
+          V6_LINK_OBSERVER_SIGNATURE_SHA256: ${{ inputs.observer_signature_sha256 }}
+          V6_LINK_PRIOR_ACCEPTED_DRAND_ROUND: ${{ inputs.prior_accepted_drand_round }}
+          V6_LINK_RAW_EVIDENCE_SHA256: ${{ inputs.raw_evidence_sha256 }}
+          V6_LINK_SUBJECT_BOOT_IDENTITY_SHA256: ${{ inputs.subject_boot_identity_sha256 }}
+          V6_LINK_SUBJECT_PROCESS_CREATION_ID: ${{ inputs.subject_process_creation_id }}
+        run: |
+          set -euo pipefail
+          test "$(cosign version --json | jq -r '.gitVersion')" = v3.1.4
+          python3 tools/stage58_external.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: v6-n64-synthetic-link-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            link-out/envelope.json
+            link-out/envelope.sigstore.json
+            link-out/drand.json
+          if-no-files-found: error
+          retention-days: 7

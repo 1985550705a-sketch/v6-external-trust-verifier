@@ -15,7 +15,7 @@ def valid():
        "fulcio_chain_verified":True,"rekor_inclusion_verified":True,"rekor_signed_entry_timestamp_verified":True,"sigstore_tuf_root_verified":True,
        "certificate_identity_exact":True,"certificate_oidc_issuer_exact":True,"certificate_github_workflow_repository_exact":True,
        "certificate_github_workflow_ref_exact":True,"certificate_github_workflow_sha_exact":True,"certificate_github_workflow_trigger_exact":True,
-       "artifact_digest_bound":True,"envelope_sha256":"f"*64,"sigstore_bundle_sha256":"1"*64,"raw_tool_output_sha256":"e"*64}
+       "artifact_digest_bound":True,"envelope_sha256":hashlib.sha256(raw(e)).hexdigest(),"sigstore_bundle_sha256":"1"*64,"raw_tool_output_sha256":"e"*64}
     w={"schema":"V6_EXTERNAL_TRUST_WORKFLOW_CONTRACT_V3","permissions":{"contents":"read","id-token":"write"},"dependency_mode":"FULL_COMMIT_SHA_ONLY",
        "checkout_action_sha":CHECKOUT_SHA,"cosign_installer_action_sha":COSIGN_INSTALLER_SHA,"upload_artifact_action_sha":UPLOAD_ARTIFACT_SHA,
        "cosign_release":COSIGN_RELEASE,"drand_vendor_manifest_sha256":DRAND_VENDOR_MANIFEST_SHA256,"secrets_required":False,"raw_evidence_uploaded":False,
@@ -76,6 +76,8 @@ class T(unittest.TestCase):
     def test_bom(self):
         e,t,c,w=valid()
         with self.assertRaises(V3PolicyBlocked): verify_policy_v3(envelope_raw=b"\xef\xbb\xbf"+raw(e),trust_raw=raw(t),crypto_raw=raw(c),workflow_raw=raw(w),observed_challenge_age_seconds=1)
+    def test_envelope_sha_mismatch(self): self.block(lambda e,t,c,w:c.__setitem__("envelope_sha256","0"*64))
+    def test_envelope_bytes_changed(self): self.block(lambda e,t,c,w:e.__setitem__("raw_evidence_sha256","9"*64))
     def test_deterministic(self):
         e,t,c,w=valid(); self.assertEqual(self.ok(e,t,c,w)["evidence_id"],self.ok(e,t,c,w)["evidence_id"])
 

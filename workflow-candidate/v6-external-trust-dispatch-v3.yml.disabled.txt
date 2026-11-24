@@ -1,0 +1,30 @@
+name: V6 External Trust Dispatch V3
+
+on:
+  workflow_dispatch:
+    inputs:
+      raw_evidence_sha256: {description: "SHA256 only; never upload raw evidence", required: true, type: string}
+      drand_round: {required: true, type: number}
+      drand_randomness: {required: true, type: string}
+      drand_signature: {required: true, type: string}
+      observer_build_sha256: {required: true, type: string}
+      subject_boot_identity_sha256: {required: true, type: string}
+      subject_process_creation_id: {required: true, type: string}
+      prior_accepted_drand_round: {description: "0 only for first accepted run", required: true, type: number}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  external-trust:
+    uses: 1985550705a-sketch/v6-external-trust-verifier/.github/workflows/v6-external-trust-reusable-v3.yml@V6_UNSET_REUSABLE_COMMIT_SHA
+    with:
+      raw_evidence_sha256: ${{ inputs.raw_evidence_sha256 }}
+      drand_round: ${{ inputs.drand_round }}
+      drand_randomness: ${{ inputs.drand_randomness }}
+      drand_signature: ${{ inputs.drand_signature }}
+      observer_build_sha256: ${{ inputs.observer_build_sha256 }}
+      subject_boot_identity_sha256: ${{ inputs.subject_boot_identity_sha256 }}
+      subject_process_creation_id: ${{ inputs.subject_process_creation_id }}
+      prior_accepted_drand_round: ${{ inputs.prior_accepted_drand_round }}
